@@ -1,0 +1,5 @@
+# requirements.txt
+discord.py
+loguru
+python-dotenv
+# PyNaCl  # 選用（如使用語音功能）
