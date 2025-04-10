@@ -10,7 +10,7 @@ class Basic(commands.Cog):
     # 前綴指令範例
     @commands.command(name="ping")
     async def ping(self, ctx):
-        """Ping Pong"""
+        """Ping Pong (前綴指令)"""
         logger.info("收到 ping 指令 (前綴指令)")
         await ctx.send("Pong!")
 
