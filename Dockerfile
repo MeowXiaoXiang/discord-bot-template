@@ -1,5 +1,5 @@
-# 使用 Python 3.10 的官方 Docker 映像作為基礎映像
-FROM python:3.10
+# 使用 Python 3.12 的官方 Docker 映像作為基礎映像
+FROM python:3.12
 
 # 設定工作目錄
 WORKDIR /app
@@ -12,6 +12,9 @@ RUN pip install -r requirements.txt
 
 # 將你的專案代碼複製到 Docker 容器中
 COPY . .
+
+# 設定環境變數標記為 Docker 環境
+ENV DOCKER_CONTAINER=true
 
 # 當 Docker 容器啟動時，運行 main.py
 CMD ["python", "main.py"]

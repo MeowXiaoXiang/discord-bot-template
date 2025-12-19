@@ -7,65 +7,27 @@ from typing import List
 
 import os
 import sys
-import json
 import traceback
 from dotenv import load_dotenv
 
 version = "v1.0"
 start_time = datetime.now()
 
-# 讀取設定檔
-try:
-    with open("config/settings.json", 'r', encoding='utf8') as f:
-        settings = json.load(f)
-except FileNotFoundError:
-    logger.critical("找不到 config/settings.json，請確認檔案是否存在（可參考 settings.json.template）")
-    sys.exit(1)
+# ─────────── Intents 設定 ─────────── #
+# Privileged Intents 需在 Developer Portal 啟用
+# members: 成員事件 | message_content: 訊息內容（前綴指令需要）| presences: 狀態活動
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
 
-# ───────────────────────────────────────────────────────────── #
-#  初始化 Intents：指定你的機器人想接收哪些 Discord 事件
-# ───────────────────────────────────────────────────────────── #
-# Discord 為提升效能與安全，將某些事件設為「選擇性啟用」(Privileged Intents)
-# 你需要在 Discord Developer Portal 的 Bot 設定頁面中勾選這些 Intents 才能生效。
-#   ➤ https://discord.com/developers/applications → 你的應用程式 → Bot → Privileged Gateway Intents
-#
-# 常見可選項目：
-#   - `members`：成員加入/離開事件、取得 guild 成員列表（需打開「Server Members Intent」）
-#   - `message_content`：讀取文字訊息內容（前綴指令與訊息分析等都會用到）
-#   - `presences`：線上狀態、遊戲活動等（需讀取用戶的活動時會用到）
-#
-# 🔸 若未啟用而直接在程式中設為 True，可能會導致部分事件無法觸發（如 message 未收到）
-# 🔸 開啟後仍需使用者給予對應權限才能運作（如 BOT 加入伺服器時勾選 "讀取訊息內容" 權限）
-# ───────────────────────────────────────────────────────────── #
-
-intents = discord.Intents.default()        # Intents 預設（開著大多數需要的事件）
-intents.members = True                     # 可選：接收成員列表與加入/退出事件（管理型機器人推薦開）
-intents.message_content = True             # 可選：接收訊息內容（必要於前綴指令、聊天分析、關鍵字觸發等）
-
-# 啟用建議（依用途）：
-# - 音樂播放機器人：建議至少啟用 `message_content`
-# - 管理工具型 Bot：建議開啟 `members`，視需求開啟 `message_content`
-# - 傳統文字指令（prefix commands）：需要 `message_content` 才能解析使用者輸入
-# - 純 slash 指令 bot（僅使用 `/` 指令）：可不開啟 message_content，但啟用 `members` 仍有幫助
-
-# ───────────────────────────────────────────────────────── #
-#  初始化 Bot 實例：設定前綴與 Intents
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── Bot 初始化 ─────────── #
+# command_prefix 可選: "!" | ["!", "-"] | commands.when_mentioned | commands.when_mentioned_or("!")
 bot = commands.Bot(
-    command_prefix="!" ,  # 指令觸發方式為「被提及」時才觸發，例如：@Bot hello
-    # 如需更改為符號前綴（如 ! 或 -），可改為：
-    # 用!當前綴: command_prefix="!" 
-    # 用!或-當前綴: command_prefix=["!", "-"]
-    # 用@標記機器人或!當前綴: command_prefix=commands.when_mentioned_or("!")
-    # 用@標記機器人當前綴: command_prefix=commands.when_mentioned
+    command_prefix="!",
     intents=intents
 )
 
-# ───────────────────────────────────────────────────────── #
-#  自訂 HelpCommand：美化 !help 輸出，支援指令查詢與 Embed 顯示
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── 自訂 HelpCommand ─────────── #
 class CustomHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping):
         embed = discord.Embed(
@@ -106,48 +68,28 @@ class CustomHelpCommand(commands.HelpCommand):
 
 bot.help_command = CustomHelpCommand()
 
-# ───────────────────────────────────────────────────────── #
-# 機器人啟動後事件：載入 Cogs、同步斜線指令、設置狀態
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── Bot 啟動事件 ─────────── #
 @bot.event
 async def on_ready():
-    # 設定擁有者 ID（用於錯誤回報與特殊權限）
     app_info = await bot.application_info()
     bot.owner_id = app_info.owner.id
 
-    # 載入內建管理指令（如 reload、status）
     logger.info("[初始化] 載入基本指令")
     await bot.add_cog(ManagementCommand(bot))
 
-    # 載入 cogs 資料夾中所有的 Extension 模組
     await load_all_extensions()
 
-    # 同步斜線指令（確保 Discord 上已註冊）
     logger.info("[初始化] 同步斜線指令")
     slash_command = await bot.tree.sync()
     logger.info(f"[初始化] 已同步 {len(slash_command)} 個斜線指令")
 
-    logger.info("[初始化] 設定機器人的狀態")
-
-    # 🎮 設定機器人的狀態顯示（可自訂顯示的內容）
-    # ➤ 可選狀態類型範例：
-    #   - discord.Game("遊玩 XXX")         → 顯示為「正在遊玩 XXX」
-    #   - discord.Streaming(name="直播中", url="直播網址")
-    #   - discord.Activity(type=discord.ActivityType.listening, name="聽 XXX")
-    #   - discord.Activity(type=discord.ActivityType.watching, name="看 XXX")
-    #   - discord.CustomActivity(name="自定義狀態") ← 本範例使用
-    # 進一步參考官方文件：
-    # https://discordpy.readthedocs.io/en/latest/api.html#discord.Client.change_presence
+    # Activity: Game | Streaming | Activity(type=listening/watching) | CustomActivity
     activity = discord.CustomActivity(name="無所事事中....")
     await bot.change_presence(activity=activity)
 
     logger.info(f"[初始化] {bot.user} | Ready!")
 
-# ───────────────────────────────────────────────────────── #
-#  Extension 模組載入器：自動讀取 /cogs 資料夾中的 .py
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── 載入所有 Extensions ─────────── #
 async def load_all_extensions():
     cogs_dir = os.path.join(os.path.dirname(__file__), 'cogs')
     for filename in os.listdir(cogs_dir):
@@ -160,22 +102,7 @@ async def load_all_extensions():
     logger.info("[初始化] Extension 載入完畢")
 
 
-# ───────────────────────────────────────────────────────── #
-#  錯誤處理：前綴指令錯誤 / 斜線指令錯誤 回報給擁有者
-# ───────────────────────────────────────────────────────── #
-# 這邊的處理分為兩種：
-# 1. 前綴指令錯誤（如：!play）
-# 2. 斜線指令錯誤（如：/play）
-#
-# 若使用者觸發指令時發生錯誤（語法錯誤、模組問題等），
-# 系統會自動生成錯誤 Embed，私訊發送給「Bot 擁有者（maintainer）」。
-#
-# 注意：
-# - `bot.owner_id` 會在 on_ready 事件中設定（需已啟動應用程式資訊）
-# - `get_user(id)` 為同步函式，僅從 cache 中查詢（不會從 API 抓）
-# - `traceback.format_exc()` 會捕捉並格式化最後一個例外堆疊（debug 用）
-# - 你可以依據需求改為回覆錯誤給使用者（但風險是會暴露錯誤訊息）
-
+# ─────────── 錯誤處理 ─────────── #
 @bot.event
 async def on_command_error(ctx, error):
     maintainer = bot.get_user(bot.owner_id)
@@ -208,28 +135,20 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
 
     await maintainer.send(embed=embed)
 
-# ───────────────────────────────────────────────────────── #
-#   管理指令模組：模組載入 / 卸載 / 重載 / 狀態查詢
-# ▸ 僅限管理員使用，可於伺服器或私訊中執行
-# ▸ 支援斜線指令與自動補全，整合 Discord 機器人管理流程
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── 管理指令模組 ─────────── #
 class ManagementCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def extension_autocomplete(self, interaction: discord.Interaction, current: str) -> List[discord.app_commands.Choice[str]]:
-        """提供斜線指令的模組名稱自動補全"""
         cogs_dir = os.path.join(os.path.dirname(__file__), 'cogs')
         extensions = [f[:-3] for f in os.listdir(cogs_dir) if f.endswith('.py')]
         return [discord.app_commands.Choice(name=e, value=e) for e in extensions if current in e]
 
     def is_admin(self, interaction: discord.Interaction) -> bool:
-        """檢查使用者是否為管理員"""
         return interaction.user.guild_permissions.administrator if interaction.guild else True
 
     async def _extension_action(self, interaction: discord.Interaction, action: str, extension: str):
-        """統一處理模組操作：load / unload / reload"""
         if not self.is_admin(interaction):
             await interaction.response.send_message("你沒有足夠的權限使用這個命令", ephemeral=True)
             return
@@ -252,8 +171,6 @@ class ManagementCommand(commands.Cog):
         except Exception as e:
             await interaction.response.send_message(embed=discord.Embed(title="❌ 發生錯誤", description=str(e), color=0xff0000), ephemeral=True)
             logger.error(f"[管理指令] 操作模組錯誤：{e}\n{traceback.format_exc()}")
-
-    # ──────────────── 指令區 ──────────────── #
 
     @discord.app_commands.command(name="載入模組", description="載入指定的 COG 模組")
     @discord.app_commands.describe(extension="選擇載入的模組")
@@ -301,39 +218,29 @@ class ManagementCommand(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# ───────────────────────────────────────────────────────── #
-#  重啟機器人指令：僅限擁有者使用，提供重啟機器人的功能
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── 重啟機器人指令 ─────────── #
 @bot.tree.command(name="重啟機器人", description="重新啟動機器人（僅限擁有者）")
 async def restart_bot_command(interaction: discord.Interaction):
-    # 僅限 Bot 擁有者可以使用此指令
     if interaction.user.id != bot.owner_id:
         await interaction.response.send_message("❌ 你不是機器人擁有者，無法使用此指令。", ephemeral=True)
         return
 
-    # 顯示一個包含「確認 / 取消」的按鈕介面，避免誤觸，ephemeral=True 代表僅自己能看到
     view = RestartConfirmView(bot, interaction)
     await interaction.response.send_message("您確定要重新啟動機器人嗎？", view=view, ephemeral=True)
 
-# ───────────────────────────────────────────────────────── #
-#  RestartConfirmView：按鈕確認與操作邏輯
-# ───────────────────────────────────────────────────────── #
-
+# ─────────── 重啟確認 View ─────────── #
 class RestartConfirmView(discord.ui.View):
     def __init__(self, bot, interaction: discord.Interaction, timeout: int = 120):
         super().__init__(timeout=timeout)
         self.bot = bot
         self.interaction = interaction
-        self.has_interacted = False  # 避免多次互動（超時後仍被點擊）
+        self.has_interacted = False
 
     def disable_all_buttons(self):
-        # 將所有按鈕禁用，避免重複點擊或誤觸
         for item in self.children:
             item.disabled = True
 
     async def on_timeout(self):
-        # 若在 timeout 秒內沒有人操作，將按鈕設為無效
         if not self.has_interacted:
             self.disable_all_buttons()
             try:
@@ -344,10 +251,8 @@ class RestartConfirmView(discord.ui.View):
             except Exception as e:
                 logger.warning(f"[重啟按鈕超時失敗] {e}")
 
-    # ✅ 確認重啟按鈕
     @discord.ui.button(label="✅ 確認重啟", style=discord.ButtonStyle.success, custom_id="restart_confirm", row=0)
     async def confirm_restart(self, interaction: discord.Interaction, _):
-        # 僅限 Bot 擁有者可以操作按鈕
         if interaction.user.id != self.bot.owner_id:
             await interaction.response.send_message("❌ 你無權操作此按鈕。", ephemeral=True)
             return
@@ -357,9 +262,8 @@ class RestartConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="🔁 正在重啟機器人...", view=self)
 
         logger.info("[重啟指令] Bot 正在重啟...")
-        restart_program()  # 透過 os.execl 重啟程式
+        await restart_program()
 
-    # ❌ 取消按鈕
     @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, custom_id="restart_cancel", row=0, emoji="❌")
     async def cancel_restart(self, interaction: discord.Interaction, _):
         self.has_interacted = True
@@ -368,50 +272,52 @@ class RestartConfirmView(discord.ui.View):
 
         logger.info("[重啟指令] 已取消")
 
-# ───────────────────────────────────────────────────────── #
-#  restart_program：使用 os.execl 執行進程替換重啟
-# ───────────────────────────────────────────────────────── #
-def restart_program():
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
+# ─────────── 重啟程式 ─────────── #
+async def restart_program():
+    """
+    優雅重啟機器人，支援多種環境
+    - 本地開發：使用 os.execv 重啟進程
+    - Docker/systemd：優雅關閉，由外部進程管理器重啟
+    """
+    logger.info("[重啟] 關閉所有連線...")
+    await bot.close()  # 優雅關閉 Discord 連線
+    
+    # 檢查是否在 Docker 或 systemd 環境中
+    if os.getenv("DOCKER_CONTAINER") or os.path.exists("/.dockerenv"):
+        logger.info("[重啟] 偵測到 Docker 環境，使用 sys.exit(0)")
+        sys.exit(0)  # Docker 會自動重啟
+    else:
+        logger.info("[重啟] 使用 os.execv 重啟進程")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
-# ───────────────────────────────────────────────────────── #
-#  Loguru 記錄器設定：支援 DEBUG 模式、檔案輸出與壓縮
-# ───────────────────────────────────────────────────────── #
+# ─────────── Loguru 設定 ─────────── #
 def set_logger():
-    """設定 Loguru 的輸出行為（終端機 & 檔案）"""
-    logger.remove()  # 清除預設輸出，避免重複
-
-    # 是否啟用 DEBUG 模式（從 settings 讀取），如果啟用，則顯示 DEBUG 級別的訊息
-    debug_mode = settings.get('DEBUG', False) is True
-
-    # 設定終端輸出：顏色 + 等級
+    logger.remove()
+    
+    # 從環境變數讀取 DEBUG 模式
+    debug_mode = os.getenv("DEBUG", "false").lower() == "true"
+    
     logger.add(
         sys.stdout,
         level="DEBUG" if debug_mode else "INFO",
         colorize=True
     )
-
-    # 設定檔案輸出：輪替、壓縮、格式化
-    #  預設僅記錄 INFO 以上的日誌，避免 DEBUG 訊息造成日誌膨脹
-    #  若你希望在 DEBUG 模式下也將 DEBUG 寫入檔案，可將 level 改為：
-    #  level = "DEBUG" if debug_mode else "INFO"
+    
+    # rotation: 輪替週期 | retention: 保留期限 | compression: 壓縮格式
     logger.add(
         "./logs/system.log",
-        rotation="7 days",       # 每 7 天新建檔案
-        retention="30 days",     # 最多保留 30 天
+        rotation="7 days",
+        retention="30 days",
         encoding="UTF-8",
-        compression="zip",       # 自動壓縮舊日誌
-        level="INFO",            # 記錄 INFO 以上的訊息
+        compression="zip",
+        level="INFO",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
     )
 
-# ───────────────────────────────────────────────────────── #
-#  程式入口點：載入環境變數、啟動 Discord Bot 主流程
-# ───────────────────────────────────────────────────────── #
+# ─────────── 程式入口點 ─────────── #
 if __name__ == '__main__':
-    set_logger()   # 設定 Loguru 記錄器
-    load_dotenv()  # 讀取 .env 檔案（需包含 DISCORD_BOT_TOKEN）
+    set_logger()
+    load_dotenv()
 
     TOKEN = os.getenv("DISCORD_BOT_TOKEN")
     if not TOKEN:
