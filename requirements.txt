@@ -1,5 +1,3 @@
-# requirements.txt
-discord.py
-loguru
-python-dotenv
-# PyNaCl  # 選用（如使用語音功能）
+discord.py==2.7.1
+loguru==0.7.3
+python-dotenv==1.2.2
