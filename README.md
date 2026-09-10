@@ -1,6 +1,6 @@
 # Discord Bot Template
 
-![Python 3.13](https://img.shields.io/badge/Python-3.13-blue?logo=python)
+![Python 3.14](https://img.shields.io/badge/Python-3.14-blue?logo=python)
 ![discord.py 2.7.1](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)
 ![License MIT](https://img.shields.io/badge/License-MIT-green)
 
@@ -18,10 +18,10 @@
 
 ## 環境需求
 
-- Python 3.13
+- Python 3.14
 - discord.py 2.7.1
 
-discord.py 官方目前要求 Python 3.8 以上；本專案以 Python 3.13 作為開發與 Docker 的驗證版本。
+discord.py 官方目前要求 Python 3.8 以上；本專案以 Python 3.14 作為開發與 Docker 的驗證版本。
 
 ## Discord 應用程式設定
 
@@ -43,7 +43,7 @@ discord.py 官方目前要求 Python 3.8 以上；本專案以 Python 3.13 作�
 ### Windows PowerShell
 
 ```powershell
-py -V:3.13 -m venv .venv
+py -V:3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 Copy-Item .env.template .env
@@ -52,7 +52,7 @@ Copy-Item .env.template .env
 ### Linux / macOS
 
 ```bash
-python3.13 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 cp .env.template .env
@@ -144,6 +144,7 @@ docker run -d \
 ```bash
 python -m unittest discover -s tests -v
 python -m compileall main.py cogs module tests
+python -m pip check
 ```
 
 ## 授權
