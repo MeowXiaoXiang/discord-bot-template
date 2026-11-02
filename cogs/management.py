@@ -71,29 +71,31 @@ class ManagementCommand(commands.Cog):
         action: ExtensionAction,
         extension: str,
     ) -> None:
-        if not await self._require_admin(interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not await self.bot.is_owner(interaction.user):
+            await interaction.edit_original_response(
+                content="模組管理會影響所有伺服器，僅限機器人擁有者使用。"
+            )
             return
 
         full_path = self.bot.extension_path(extension)
         if full_path is None:
-            await interaction.response.send_message(
+            await interaction.edit_original_response(
                 embed=discord.Embed(
                     title="模組不存在",
                     description=f"找不到 `{extension}`",
                     color=discord.Color.red(),
                 ),
-                ephemeral=True,
             )
             return
 
         if action == "unload" and full_path == self.bot.management_extension:
-            await interaction.response.send_message(
+            await interaction.edit_original_response(
                 embed=discord.Embed(
                     title="無法卸載核心模組",
                     description="`management` 是核心管理模組，不能卸載。",
                     color=discord.Color.red(),
                 ),
-                ephemeral=True,
             )
             return
 
@@ -107,46 +109,61 @@ class ManagementCommand(commands.Cog):
                     await self.bot.unload_extension(full_path)
                 case "reload":
                     await self.bot.reload_extension(full_path)
-
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title=f"已{zh_action}模組",
-                    description=f"`{extension}`",
-                    color=discord.Color.green(),
-                ),
-                ephemeral=True,
-            )
-            logger.info(f"[管理指令] {zh_action}模組成功：{extension}")
         except commands.ExtensionAlreadyLoaded:
-            await interaction.response.send_message(
+            await interaction.edit_original_response(
                 embed=discord.Embed(
                     title="模組已載入",
                     description=f"`{extension}` 已載入過",
                     color=discord.Color.yellow(),
                 ),
-                ephemeral=True,
             )
+            return
         except commands.ExtensionNotLoaded:
-            await interaction.response.send_message(
+            await interaction.edit_original_response(
                 embed=discord.Embed(
                     title="模組尚未載入",
                     description=f"`{extension}` 尚未載入",
                     color=discord.Color.orange(),
                 ),
-                ephemeral=True,
             )
+            return
         except Exception as error:
             logger.opt(exception=error).error(
                 f"[管理指令] {zh_action}模組失敗：{extension}"
             )
-            await interaction.response.send_message(
+            await interaction.edit_original_response(
                 embed=discord.Embed(
                     title="發生錯誤",
                     description=str(error)[:4096],
                     color=discord.Color.red(),
                 ),
-                ephemeral=True,
             )
+            return
+
+        logger.info(f"[管理指令] {zh_action}模組成功：{extension}")
+        try:
+            await self.bot.tree.sync()
+        except Exception as error:
+            logger.opt(exception=error).error("[管理指令] 同步斜線指令失敗")
+            await interaction.edit_original_response(
+                embed=discord.Embed(
+                    title=f"已{zh_action}模組，但同步失敗",
+                    description=(
+                        f"`{extension}` 的本機狀態已變更，Discord 指令選單尚未更新。"
+                        "請檢查日誌，排除同步問題後重新啟動機器人。"
+                    ),
+                    color=discord.Color.orange(),
+                ),
+            )
+            return
+
+        await interaction.edit_original_response(
+            embed=discord.Embed(
+                title=f"已{zh_action}模組",
+                description=f"`{extension}`，已同步斜線指令。",
+                color=discord.Color.green(),
+            ),
+        )
 
     @app_commands.command(name="載入模組", description="載入指定的 Cog 模組")
     @app_commands.guild_only()

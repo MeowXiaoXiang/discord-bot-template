@@ -266,8 +266,7 @@ async def on_app_command_error(
 ) -> None:
     if isinstance(error, (app_commands.CheckFailure, app_commands.TransformerError)):
         logger.warning(f"[斜線指令] 使用者輸入或權限錯誤: {error}")
-        if not interaction.response.is_done():
-            await interaction.response.send_message(str(error), ephemeral=True)
+        await _reply_to_interaction_error(interaction, str(error))
         return
 
     actual_error = (
@@ -279,14 +278,9 @@ async def on_app_command_error(
         f"{actual_error}\n{_format_exception(actual_error)}"
     )
 
-    if not interaction.response.is_done():
-        try:
-            await interaction.response.send_message(
-                "執行指令時發生錯誤，已通知維護者。",
-                ephemeral=True,
-            )
-        except discord.HTTPException as response_error:
-            logger.warning(f"[錯誤回報] 無法回覆 interaction: {response_error}")
+    await _reply_to_interaction_error(
+        interaction, "執行指令時發生錯誤，請聯絡維護者。"
+    )
 
     embed = discord.Embed(
         title="斜線指令錯誤",
@@ -308,6 +302,18 @@ async def on_app_command_error(
         inline=False,
     )
     await _send_error_to_maintainer(embed)
+
+
+async def _reply_to_interaction_error(
+    interaction: discord.Interaction, message: str
+) -> None:
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+    except discord.HTTPException as error:
+        logger.warning(f"[錯誤回報] 無法回覆 interaction: {error}")
 
 
 def set_logger() -> None:
